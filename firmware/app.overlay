@@ -1,0 +1,33 @@
+/* Copyright (c) 2026 Eoin Jordan
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * M5Stack ATOM Echo on top of the ATOM Lite board definition:
+ *   SPM1423 PDM microphone  CLK GPIO33, DATA GPIO23  (I2S0, PDM RX)
+ *   NS4168 I2S speaker      BCLK GPIO19, LRCK GPIO33, DATA GPIO22 (shares GPIO33; not used yet)
+ *   SK6812 RGB LED          GPIO27 (board file: spi3 ws2812)
+ *   button                  GPIO39 (board file: sw0)
+ */
+
+#include <zephyr/dt-bindings/pinctrl/esp32-pinctrl.h>
+
+&pinctrl {
+	i2s0_pdm_mic: i2s0_pdm_mic {
+		group1 {
+			pinmux = <I2S0_I_WS_GPIO33>;
+			output-enable;
+		};
+		group2 {
+			pinmux = <I2S0_I_SD_GPIO23>;
+			input-enable;
+		};
+	};
+};
+
+&i2s0 {
+	status = "okay";
+	pinctrl-0 = <&i2s0_pdm_mic>;
+	pinctrl-names = "default";
+	interrupts = <I2S0_INTR_SOURCE IRQ_DEFAULT_PRIORITY 0>,
+		     <I2S0_INTR_SOURCE IRQ_DEFAULT_PRIORITY 0>;
+	interrupt-names = "rx", "tx";
+};

@@ -1,0 +1,61 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  export:
+    name: Export the KWS model (host)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install executorch==1.5.1 --extra-index-url https://download.pytorch.org/whl/cpu
+      - run: python train/export_kws.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: model
+          path: |
+            firmware/model/kws.pte
+            firmware/src/kws_test_input.h
+
+  firmware:
+    name: Build firmware (m5stack_atom_lite/esp32/procpu)
+    needs: export
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: executorch-zephyr-m5stack-atom-echo
+      - uses: actions/download-artifact@v4
+        with:
+          name: model
+          path: executorch-zephyr-m5stack-atom-echo/firmware
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Zephyr host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends git cmake ninja-build gperf ccache \
+            dfu-util device-tree-compiler wget xz-utils file make gcc libsdl2-dev libmagic1
+      - run: pip install -r executorch-zephyr-m5stack-atom-echo/requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+      - name: West workspace
+        run: |
+          west init -l executorch-zephyr-m5stack-atom-echo
+          west update --narrow -o=--depth=1
+          west packages pip --install --ignore-venv-check
+      - run: west sdk install --toolchains xtensa-espressif_esp32_zephyr-elf
+      - run: west build -p always -b m5stack_atom_lite/esp32/procpu executorch-zephyr-m5stack-atom-echo/firmware
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: |
+            build/zephyr/zephyr.bin
+            build/zephyr/zephyr.elf
+            build/zephyr/zephyr.map

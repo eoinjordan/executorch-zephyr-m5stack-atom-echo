@@ -1,0 +1,51 @@
+# Copyright (c) 2026 Eoin Jordan
+# SPDX-License-Identifier: Apache-2.0
+
+mainmenu "Hey Zephyr wake word on the M5Stack ATOM Echo"
+
+config EXECUTORCH_METHOD_ALLOCATOR_POOL_SIZE
+	int "ExecuTorch method allocator pool (bytes)"
+	default 32768
+
+config EXECUTORCH_TEMP_ALLOCATOR_POOL_SIZE
+	int "ExecuTorch temp allocator pool (bytes)"
+	default 8192
+
+config APP_INFER_PERIOD_MS
+	int "How often the newest second of audio is scored (ms)"
+	default 250
+
+config APP_WAKE_THRESHOLD_PERCENT
+	int "p(hey_zephyr) that counts as a hit (percent)"
+	default 85
+
+config APP_WAKE_CONSECUTIVE
+	int "Consecutive hits needed before a wake event"
+	default 2
+
+config APP_WAKE_HOLDOFF_MS
+	int "Ignore further hits for this long after a wake event (ms)"
+	default 1500
+
+config APP_HEARTBEAT_MS
+	int "Heartbeat JSON line period (ms)"
+	default 5000
+
+config APP_MIC_I2S_FRAME_HZ
+	int "I2S frame clock the driver is configured for (Hz)"
+	default 32000
+	help
+	  With 16-bit stereo frames the bit clock is 32 x this. 32000 gives the
+	  1.024 MHz PDM clock that yields 16 kHz PCM from the ESP32's PDM-to-PCM
+	  filter at DSR 8.
+
+config APP_MIC_PICK
+	int "Which halfword of each DMA word is the sample (-1 = measure and pick)"
+	default -1
+	range -1 2
+
+config APP_MIC_DEBUG
+	bool "Print microphone rates, RMS and peak frequency once a second"
+	default n
+
+source "Kconfig.zephyr"

@@ -1,0 +1,31 @@
+# Copyright (c) 2026 Eoin Jordan
+# SPDX-License-Identifier: Apache-2.0
+#
+#   west init -m https://github.com/eoinjordan/executorch-zephyr-m5stack-atom-echo ws
+#   cd ws && west update
+
+manifest:
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+    - name: pytorch
+      url-base: https://github.com/pytorch
+
+  projects:
+    - name: zephyr
+      remote: zephyrproject-rtos
+      revision: v4.4.0
+      import:
+        name-allowlist:
+          - hal_espressif
+          - cmsis
+          - cmsis_6
+
+    - name: executorch
+      remote: pytorch
+      revision: v1.5.1
+      path: modules/lib/executorch
+      submodules: true
+
+  self:
+    path: executorch-zephyr-m5stack-atom-echo

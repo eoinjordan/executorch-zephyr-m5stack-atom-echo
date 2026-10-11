@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+train/data/
+train/out/
+build/
+build-*/
+twister-out*/
+.venv/
+*.swp
+.DS_Store
