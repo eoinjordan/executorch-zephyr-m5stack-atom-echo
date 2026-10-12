@@ -78,6 +78,9 @@ def main() -> None:
     ap.add_argument("--lr", type=float, default=2e-3)
     ap.add_argument("--threshold", type=float, default=0.85, help="firmware wake threshold for FRR/FAR")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--ch", type=int, default=None, help="KwsNet width (default kws_model.CH)")
+    ap.add_argument("--blocks", type=int, default=None, help="KwsNet DS-conv blocks (default kws_model.BLOCKS)")
+    ap.add_argument("--tag", default="kws", help="checkpoint name: out/<tag>.pt")
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
@@ -102,9 +105,11 @@ def main() -> None:
     xt = torch.from_numpy(xn)[:, None]  # (N, 1, 49, 10)
     yt = torch.from_numpy(y)
 
-    model = KwsNet()
+    from kws_model import CH, BLOCKS
+    ch, blocks = args.ch or CH, args.blocks or BLOCKS
+    model = KwsNet(ch=ch, blocks=blocks)
     n_params = sum(p.numel() for p in model.parameters())
-    print(f"KwsNet {n_params} parameters; train {len(idx_tr)} / val {len(idx_va)}")
+    print(f"KwsNet ch={ch} blocks={blocks}: {n_params} parameters; train {len(idx_tr)} / val {len(idx_va)}")
     weights = torch.tensor([1.0, 1.0, 1.5])
     crit = nn.CrossEntropyLoss(weight=weights)
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
@@ -152,10 +157,11 @@ def main() -> None:
     print("held-out:", json.dumps(metrics))
 
     args.out.mkdir(parents=True, exist_ok=True)
+    metrics.update({"ch": ch, "blocks": blocks})
     torch.save({"state_dict": model.state_dict(), "feat_mean": mean.tolist(), "feat_std": std.tolist(),
-                "labels": LABELS, "metrics": metrics}, args.out / "kws.pt")
-    (args.out / "metrics.json").write_text(json.dumps(metrics, indent=2))
-    print(f"saved {args.out / 'kws.pt'}")
+                "labels": LABELS, "metrics": metrics, "ch": ch, "blocks": blocks}, args.out / f"{args.tag}.pt")
+    (args.out / f"{args.tag}_metrics.json").write_text(json.dumps(metrics, indent=2))
+    print(f"saved {args.out / (args.tag + '.pt')}")
 
 
 if __name__ == "__main__":

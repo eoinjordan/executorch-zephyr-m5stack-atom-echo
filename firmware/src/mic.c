@@ -52,6 +52,39 @@ static int pick = CONFIG_APP_MIC_PICK; /* -1 = auto */
 K_THREAD_STACK_DEFINE(mic_stack, 3072);
 static struct k_thread mic_thread;
 
+
+#ifdef CONFIG_APP_MIC_DEBUG
+#include <hal/gpio_ll.h>
+#include <soc/gpio_struct.h>
+/* Sample a pad's input buffer n times as fast as the CPU can; returns how many
+ * reads were high. A live PDM data line or clock sits near 50 %. */
+static unsigned pad_ones(int gpio, unsigned n)
+{
+	gpio_ll_input_enable(&GPIO, gpio);
+	unsigned ones = 0;
+	for (unsigned i = 0; i < n; i++) {
+		ones += gpio_ll_get_level(&GPIO, gpio);
+	}
+	return ones;
+}
+
+/* Rising edges per second on a pad, from a tight polling loop timed with the
+ * cycle counter. Fine for telling 32 kHz from 1 MHz; not a frequency counter. */
+static unsigned pad_hz(int gpio, unsigned n)
+{
+	gpio_ll_input_enable(&GPIO, gpio);
+	unsigned edges = 0, prev = gpio_ll_get_level(&GPIO, gpio);
+	uint32_t t0 = k_cycle_get_32();
+	for (unsigned i = 0; i < n; i++) {
+		unsigned v = gpio_ll_get_level(&GPIO, gpio);
+		edges += (v & ~prev) & 1u;
+		prev = v;
+	}
+	uint32_t ns = k_cyc_to_ns_floor32(k_cycle_get_32() - t0);
+	return ns ? (unsigned)((uint64_t)edges * 1000000000ull / ns) : 0;
+}
+#endif
+
 static void push_samples(const int16_t *s, size_t n)
 {
 	k_spinlock_key_t key = k_spin_lock(&lock);
@@ -160,6 +193,10 @@ int mic_init(void)
 		.block_size = BLOCK_BYTES,
 		.timeout = 1000,
 	};
+#ifdef CONFIG_APP_MIC_DEBUG
+	printk("mic: pad levels before start: GPIO33 %u/2000 high, GPIO23 %u/2000 high\n", pad_ones(33, 2000),
+	       pad_ones(23, 2000));
+#endif
 	int ret = i2s_configure(i2s, I2S_DIR_RX, &cfg);
 	if (ret != 0) {
 		printk("mic: i2s_configure failed (%d)\n", ret);
@@ -171,8 +208,16 @@ int mic_init(void)
 	 * in ESP-IDF for the ESP32. */
 	i2s_dev_t *hw = &I2S0;
 	i2s_ll_rx_set_sample_bit(hw, 16, 16);
+#if defined(CONFIG_APP_MIC_SLOT_BOTH)
+	i2s_ll_rx_enable_mono_mode(hw, false);
+	i2s_ll_rx_select_pdm_slot(hw, I2S_PDM_SLOT_BOTH);
+#elif defined(CONFIG_APP_MIC_SLOT_LEFT)
 	i2s_ll_rx_enable_mono_mode(hw, true);
 	i2s_ll_rx_select_pdm_slot(hw, I2S_PDM_SLOT_LEFT);
+#else
+	i2s_ll_rx_enable_mono_mode(hw, true);
+	i2s_ll_rx_select_pdm_slot(hw, I2S_PDM_SLOT_RIGHT);
+#endif
 	i2s_ll_rx_force_enable_fifo_mod(hw, true);
 	i2s_ll_rx_enable_msb_right(hw, false);
 	i2s_ll_rx_enable_right_first(hw, false);
@@ -186,11 +231,23 @@ int mic_init(void)
 		return ret;
 	}
 
+#ifdef CONFIG_APP_MIC_DEBUG
+	k_msleep(5);
+	printk("mic: pad levels after start: GPIO33 (clk) %u/2000 high, GPIO23 (data) %u/2000 high\n",
+	       pad_ones(33, 2000), pad_ones(23, 2000));
+	printk("mic: pad edge rates: GPIO33 (clk) ~%u Hz, GPIO23 (data) ~%u Hz\n", pad_hz(33, 400000),
+	       pad_hz(23, 400000));
+	printk("mic: regs pdm_conf=0x%08x conf=0x%08x conf_chan=0x%08x sample_rate=0x%08x clkm=0x%08x fifo_conf=0x%08x\n",
+	       (unsigned)hw->pdm_conf.val, (unsigned)hw->conf.val, (unsigned)hw->conf_chan.val,
+	       (unsigned)hw->sample_rate_conf.val, (unsigned)hw->clkm_conf.val, (unsigned)hw->fifo_conf.val);
+#endif
 	k_thread_create(&mic_thread, mic_stack, K_THREAD_STACK_SIZEOF(mic_stack), mic_thread_fn, NULL,
 			NULL, NULL, K_PRIO_COOP(4), 0, K_NO_WAIT);
 	k_thread_name_set(&mic_thread, "mic");
-	printk("mic: SPM1423 PDM on I2S0 (clk GPIO33, data GPIO23), bck %u Hz, pick %s\n",
-	       FRAME_HZ * 32, pick < 0 ? "auto" : "fixed");
+	printk("mic: SPM1423 PDM on I2S0 (clk GPIO33, data GPIO23), bck %u Hz, slot %s, pick %s\n",
+	       FRAME_HZ * 32,
+	       IS_ENABLED(CONFIG_APP_MIC_SLOT_BOTH) ? "both" : IS_ENABLED(CONFIG_APP_MIC_SLOT_LEFT) ? "left" : "right",
+	       pick < 0 ? "auto" : "fixed");
 	return 0;
 }
 

@@ -17,18 +17,20 @@ anything. A wake event becomes a Home Assistant `event` entity you can trigger a
 *Diagram source: [docs/diagrams/overview.drawio](docs/diagrams/overview.drawio), editable in
 [draw.io](https://www.drawio.com/); re-export to `docs/images/overview.png`.*
 
-**Status: first hardware bring-up.** The ESP32 side is proven (the plain ExecuTorch self-test
-runs on this exact board, see
-[executorch-zephyr-esp32-devkitc](https://github.com/eoinjordan/executorch-zephyr-esp32-devkitc));
-the microphone path, the on-device MFCC self-check and the trained model are being validated
-now, and the numbers below are filled in from the console as they land.
+**Status: running on the board, microphone under test.** Measured on the ATOM Echo on
+2026-10-12: the C front end matches the Python one to 2e-5, the exported model matches
+PyTorch to 4e-6, one inference takes 172 ms (24-channel model) and the 49-frame MFCC 30 ms,
+with the kernels built at -O2. The PDM capture runs at a steady 16,000 samples/s with no
+overruns, the 1.024 MHz clock is on GPIO33 and the mic's data line is live; what is still
+being checked is the decoded audio level, which has not yet been seen reacting to sound
+(see Verify, step 4). The trained model scores 96.6 % on held-out clips.
 
 ## What is in the repo
 
 | Path | What |
 |---|---|
 | `firmware/` | Zephyr app for `m5stack_atom_lite/esp32/procpu` (the Echo is an ATOM Lite plus audio): `src/mic.c` PDM capture, `src/mfcc.c` front end, `src/main.cpp` self-tests + wake loop, `src/led.c` |
-| `firmware/model/kws.pte` | the exported model the firmware embeds |
+| `firmware/model/kws.pte` | the exported model the firmware embeds (KwsNet ch=24, trained on the synthetic set; also at [eoinedge/KwsNet](https://huggingface.co/eoinedge/KwsNet)) |
 | `train/features.py` | the MFCC recipe in numpy, mirrored line for line by `mfcc.c` |
 | `train/make_dataset.py` | synthesises the training set with piper TTS + Google Speech Commands + noise |
 | `train/train_kws.py`, `train/export_kws.py` | train KwsNet, export the .pte and the self-test headers |
@@ -108,19 +110,23 @@ bridge):
 
 ```
 Hey Zephyr on m5stack_atom_lite/esp32/procpu (Zephyr 4.4.0): ExecuTorch wake word
-model: ... bytes in flash, method pool 49152 B, temp pool 8192 B
-method 'forward' loaded; input numel 490; pool used ... / 49152 bytes
+model: 16972 bytes in flash, method pool 32768 B, temp pool 8192 B
+planned buffer 0: 24000 bytes
+method 'forward' loaded; input numel 490; pool used 30216 / 32768 bytes
 
 self-test:
-  mfcc : 49 frames in ... us, max|c-python|=...e-03 ok
-  kws  : logits [...] pred=N (...) expected=N max|esp32-pytorch|=...e-06 (... us)
-  chain: C mfcc -> model, max|logit diff|=...e-03
+  mfcc : 49 frames in 29970 us, max|c-python|=1.96e-05 ok
+  kws  : logits [-32.9729 11.3140 -9.8242] pred=1 (_unknown_) expected=1 max|esp32-pytorch|=3.8e-06 (171907 us)
+  chain: C mfcc -> model, max|logit diff|=1.1e-05
 SELF-TEST PASS
-mic: SPM1423 PDM on I2S0 (clk GPIO33, data GPIO23), bck 1024000 Hz, pick auto
-mic: 16000 DMA words/s in the first 500 ms -> pick mode 0
-{"seq":0,"t_ms":5312,"wake":0,"top":"_silence_","p_wake":0.004,"infer_us":...,"samples":80000}
-{"seq":1,"t_ms":9871,"wake":1,"label":"hey_zephyr","p":0.962,"infer_us":...}
+mic: SPM1423 PDM on I2S0 (clk GPIO33, data GPIO23), bck 1024000 Hz, slot right, pick auto
+mic: 8000 DMA words/s in the first 512 ms -> pick mode 2
+mic: 8000 words/s 16000 samples/s pick 2 rms lo 65 hi 67 peak 7406 Hz overruns 0
+{"seq":0,"t_ms":5238,"wake":0,"top":"_unknown_","p_wake":0.273,"infer_us":95213,"samples":71680}
 ```
+
+(The `mic:` rate lines come from `CONFIG_APP_MIC_DEBUG=y`. 8000 DMA words/s is right: in
+mono PDM mode the ESP32 packs two 16-bit samples into each 32-bit word.)
 
 ## Home Assistant
 

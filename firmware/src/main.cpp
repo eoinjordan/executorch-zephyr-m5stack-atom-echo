@@ -320,6 +320,13 @@ int main(void)
 			printk("mic: %u words/s %u samples/s pick %d rms lo %.0f hi %.0f peak %d Hz overruns %u\n",
 			       st.words_per_s, st.samples_per_s, st.pick, (double)st.rms_lo,
 			       (double)st.rms_hi, peak * MFCC_SAMPLE_RATE / MFCC_NFFT, st.overruns);
+			if ((now / 1000) % 5 == 0) {
+				printk("mic: raw:");
+				for (int i = 0; i < 32; i++) {
+					printk(" %d", window[i]);
+				}
+				printk("\n");
+			}
 			last_stats = now;
 		}
 #endif

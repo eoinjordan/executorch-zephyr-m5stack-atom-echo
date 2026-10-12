@@ -44,6 +44,24 @@ config APP_MIC_PICK
 	default -1
 	range -1 2
 
+choice APP_MIC_SLOT
+	prompt "PDM slot the microphone drives"
+	default APP_MIC_SLOT_RIGHT
+	help
+	  The SPM1423 on the ATOM Echo has its select pin tied so it answers in
+	  the right slot (ESPHome and M5's own examples read the right channel).
+
+config APP_MIC_SLOT_RIGHT
+	bool "Right"
+
+config APP_MIC_SLOT_LEFT
+	bool "Left"
+
+config APP_MIC_SLOT_BOTH
+	bool "Both (stereo words, the louder half is picked)"
+
+endchoice
+
 config APP_MIC_DEBUG
 	bool "Print microphone rates, RMS and peak frequency once a second"
 	default n

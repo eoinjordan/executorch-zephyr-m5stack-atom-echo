@@ -98,11 +98,11 @@ def main() -> None:
     args = p.parse_args()
 
     torch.manual_seed(args.seed)
-    model = KwsNet()
+    ck = torch.load(args.checkpoint, map_location="cpu") if args.checkpoint else None
+    model = KwsNet(ch=ck["ch"], blocks=ck["blocks"]) if ck and "ch" in ck else KwsNet()
     mean = np.zeros(N_COEF, dtype=np.float32)
     std = np.ones(N_COEF, dtype=np.float32)
-    if args.checkpoint:
-        ck = torch.load(args.checkpoint, map_location="cpu")
+    if ck:
         model.load_state_dict(ck["state_dict"])
         mean = np.asarray(ck["feat_mean"], dtype=np.float32)
         std = np.asarray(ck["feat_std"], dtype=np.float32)
